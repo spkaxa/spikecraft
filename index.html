@@ -373,6 +373,22 @@ kbd{font-family:var(--px);font-size:8px;background:#2d2352;padding:2px 5px;borde
 <div id="tabon" style="display:none"><div id="onbox"></div></div></div></div></div></div>
 <div class="md" id="mhub"><div class="pan pad"><div class="hd"><h2 id="t_hub"></h2><button class="btn sm gh" id="hubback"></button></div>
 <div class="anote" style="margin-bottom:11px" id="t_hubn"></div><div id="hublist"></div>
+<div class="sec">🌐 СЕРВЕРЫ</div>
+<div id="srvlist"></div>
+<div style="background:linear-gradient(180deg,#1d2a3f,#161233);border:1px solid rgba(90,167,255,.3);border-radius:12px;padding:12px;margin-top:10px">
+<div style="font-family:var(--px);font-size:11px;color:var(--bl);margin-bottom:9px">📡 МОЙ МИР В СЕТИ</div>
+<div class="hrow">
+<div class="fd" style="margin-bottom:8px"><label>МИР</label><select id="hworld"></select></div>
+<div class="fd" style="margin-bottom:8px"><label>ПАРОЛЬ</label><input type="text" id="hpass" maxlength="20" placeholder="без пароля"></div>
+</div>
+<div class="hrow">
+<div class="fd" style="margin-bottom:8px"><label>СЛОТОВ <span class="rv" id="hslotv">10</span></label><input type="range" id="hslots" min="2" max="100" value="10"></div>
+<div class="fd" style="margin-bottom:8px"><label>PVP</label><div class="tg" id="hpvp" style="margin:0"><span>Разрешить PvP</span><span class="sw"></span></div></div>
+</div>
+<div class="tg" id="hon"><span>Открыть мир для сети</span><span class="sw"></span></div>
+<div style="display:flex;gap:7px"><button class="btn sm pri" id="hsave" style="flex:2">💾 СОХРАНИТЬ</button><button class="btn sm dg" id="hunpub" style="flex:1">🗑 СНЯТЬ</button></div>
+<div class="note">Хост видит команды и PvP. Пароль спрашивается при входе других игроков.</div>
+</div>
 <div class="sec" id="t_top"></div><div class="tabs"><button class="tab sel" data-top="mix" id="tt_mix"></button><button class="tab" data-top="speed" id="tt_sp"></button></div><div id="toplist"></div></div></div>
 <div class="md" id="mjob"><div class="pan pad"><div class="hd"><h2 id="t_job"></h2><span class="sub" id="jobbal"></span><button class="btn sm gh" id="jback"></button></div>
 <div class="anote" style="margin-bottom:11px" id="jobnote"></div><div id="joblist" class="scroll" style="max-height:56vh"></div></div></div>
@@ -3340,6 +3356,25 @@ PR.job=b.dataset.job;PR.jobAt=Date.now();sprof();fbSave();award('job');toast('П
 $('mjob').classList.add('on')}
 $('jback').addEventListener('click',function(){$('mjob').classList.remove('on');if(W&&!P.dead)enterGame();else{showScreen('menu');GS='menu'}});
 /* ============ PANORAMA ============ */
+$('hslots').addEventListener('input',function(e){$('hslotv').textContent=e.target.value});
+$('hon').addEventListener('click',function(){$('hon').classList.toggle('on');A.sfx('click')});
+$('hpvp').addEventListener('click',function(){$('hpvp').classList.toggle('on');A.sfx('click')});
+$('hsave').addEventListener('click',function(){
+var ms=ST.get('sc13worlds',[]).filter(function(m){return!m.srv});
+if(!ms.length){toast(LANG==='ru'?'Сначала создай свой мир':'Create a world first','warn');return}
+HOST.world=$('hworld').value||ms[0].id;HOST.pass=$('hpass').value.trim().slice(0,20);
+HOST.slots=+$('hslots').value;HOST.on=$('hon').classList.contains('on');HOST.pvp=$('hpvp').classList.contains('on');
+ST.set('sc13host',HOST);
+if(W&&W.id===HOST.world){W.pvp=HOST.pvp;badges()}
+if(FB.online&&HOST.on)fbPut('/host/'+fbUid(),{uid:fbUid(),nick:PR.nick,world:HOST.world,pass:HOST.pass,slots:HOST.slots,pvp:HOST.pvp,ts:Date.now()}).catch(function(){});
+if(FB.online&&!HOST.on)fbDel('/host/'+fbUid());
+renderSrv();A.sfx('ach');toast(HOST.on?'🌐 '+(LANG==='ru'?'Опубликовано':'Published'):(LANG==='ru'?'Снято':'Unpublished'))});
+$('hunpub').addEventListener('click',function(){HOST.on=false;ST.set('sc13host',HOST);hostUI();renderSrv();
+if(FB.online)fbDel('/host/'+fbUid());toast(LANG==='ru'?'Снято с публикации':'Unpublished','warn')});
+var _mgHub=mgHub;
+mgHub=function(){hostUI();_mgHub();renderSrv()};
+var _renderOnline=renderOnline;
+renderOnline=function(){_renderOnline();if(FB.online&&FB.prof&&FB.prof.admin&&$('onrules'))$('onrules').textContent='🔐 RULES'};
 var PS=new THREE.Scene(),PC=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,900),pa=0,pm={x:0,y:0},pcl=[],pff=null;
 function panorama(){var os=SEED,op=PRESET;SEED=4242;seedNoise(4242);PRESET='';PS.fog=new THREE.Fog(0x2a2050,60,240);
 var dg=new THREE.SphereGeometry(400,20,14),cols=[],pa2=dg.attributes.position;
@@ -3429,11 +3464,12 @@ $('wplay').disabled=!s||s.dead;$('wren').disabled=!s;$('wdel').disabled=!s}
 function playWorld(){var ms=ST.get('sc13worlds',[]),m=null;ms.forEach(function(x){if(x.id===selW)m=x});
 if(!m||m.dead)return;A.init();A.sfx('click');NET.srv=m.srv||null;loadWorld(m)}
 var cfCB=null;
-function ask(t,x,cb,inp){$('cft').textContent=t;$('cfx').textContent=x;
-$('cfi').style.display=inp!==undefined&&inp!==null?'block':'none';if(inp!==undefined&&inp!==null)$('cfi').value=inp;
-$('cfy').textContent=t('ok');cfCB=cb;$('mconf').classList.add('on');if(inp!==undefined&&inp!==null)$('cfi').focus()}
-$('cfy').addEventListener('click',function(){$('mconf').classList.remove('on');if(cfCB)cfCB($('cfi').value);cfCB=null});
-$('cfn').addEventListener('click',function(){$('mconf').classList.remove('on');cfCB=null});
+function ask(ttl,msg,cb,inp){
+$('cft').textContent=ttl;$('cfx').textContent=msg;
+var hasInp=inp!==undefined&&inp!==null;
+$('cfi').style.display=hasInp?'block':'none';if(hasInp)$('cfi').value=inp;
+$('cfy').textContent=t('ok');$('cfn').textContent=t('cancel');
+cfCB=cb;$('mconf').classList.add('on');if(hasInp)$('cfi').focus()}
 var SPL=['Алмазы ждут!','Ад и Край открыты!','Не копай вниз!','300+ предметов!','Осторожно, хардкор!','M — карта!',
 'H — аукцион!','Дракон ждёт!','Эндернит — лучшая руда!','Z — зум!','Динамит одобряет 💥','Сделано с ❤ и вокселями',
 'Spike-мощь!','Полублоки вертикально!','Стул — сядь и отдохни!','Размножай животных!','Лава теперь оранжевая!',
