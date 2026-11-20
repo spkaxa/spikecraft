@@ -3411,4 +3411,461 @@ document.addEventListener('visibilitychange',function(){
 if(document.hidden&&GS==='game'){exitPointerLock();pauseGame()}});
 function startGame(){
 GS='game';SCREENS.forEach(function(s){$(s).classList.remove('on')});
-$('hud').
+$('hud').classList.add('on');$('mtop').style.display='none';
+document.querySelector('.foot').style.display='none';$('gl').style.opacity=1;
+$('hint').style.opacity=1;setTimeout(function(){if(GS==='game')$('hint').style.opacity=0},15000);
+$('clog').innerHTML='';lastHudKey='';hudDirty=true;
+chatLog(L('Добро пожаловать в <b>','Welcome to <b>')+esc(World.name)+'</b>! '+
+({easy:L('лёгкая','easy'),normal:L('обычная','normal'),hard:L('сложная','hard'),hardcore:'☠ HARDCORE'}[World.difficulty])+
+L(' сложность.',' difficulty.'),'ok');
+chatLog(L('Ядро: обычный мир. Ад, Край и онлайн придут следующими шагами.','Core: overworld. Nether, End and online come next.'),'inf');
+if(World.villages&&World.villages.length)chatLog(L('Деревень в мире: ','Villages: ')+World.villages.length+L(' — открой карту (M).',' — open map (M).'),'inf');
+renderHotbar();updateHand();updateBadges();
+var rd=rdVal();scene.fog.near=rd*.52;scene.fog.far=rd*.98;
+camera.far=Math.max(400,rd*1.3);camera.updateProjectionMatrix();
+streamWorld();enterGame()}
+/* ---------- world list / create screens ---------- */
+var selectedWorld=null;
+function renderWorldList(){
+var list=Store.get('ck_worlds',[]).sort(function(a,b){return b.played-a.played});
+$('wcnt').textContent=list.length?list.length+' '+L('мир(ов)','world(s)'):'';
+$('wempty').style.display=list.length?'none':'block';
+$('wlist').innerHTML=list.map(function(m){
+return'<div class="wc '+(selectedWorld===m.id?'sel':'')+'" data-id="'+m.id+'"><img src="'+(m.thumbnail||'')+'">'+
+'<div><h3>'+esc(m.name)+'</h3><div class="mt">'+
+'<span class="tag'+(m.difficulty==='hardcore'?' hc':'')+'">'+m.difficulty.toUpperCase()+'</span>'+
+(m.mode==='creative'?'<span class="tag cr">✦</span>':'')+(m.dead?'<span class="tag dd">💀</span>':'')+
+'<br>'+m.size+'² · '+fmtTime(m.playTime||0)+'<br>'+fmtDate(m.played)+'</div></div></div>'}).join('');
+Array.prototype.forEach.call($('wlist').querySelectorAll('.wc'),function(el){
+el.addEventListener('click',function(){selectedWorld=el.dataset.id;renderWorldList();Snd.play('click')});
+el.addEventListener('dblclick',function(){selectedWorld=el.dataset.id;playSelectedWorld()})});
+var sel=null;list.forEach(function(m){if(m.id===selectedWorld)sel=m});
+$('wPlay').disabled=!sel||sel.dead;$('wRen').disabled=!sel;$('wDel').disabled=!sel}
+function playSelectedWorld(){
+var list=Store.get('ck_worlds',[]),meta=null;
+list.forEach(function(m){if(m.id===selectedWorld)meta=m});
+if(!meta||meta.dead)return;
+Snd.init();Snd.play('click');loadWorld(meta)}
+var askCallback=null;
+function askDialog(title,text,callback,inputValue){
+$('askT').textContent=title;$('askX').textContent=text;
+var hasInput=inputValue!==undefined&&inputValue!==null;
+$('askI').style.display=hasInput?'block':'none';
+if(hasInput)$('askI').value=inputValue;
+$('askY').textContent=T('ok');$('askN').textContent=T('cancel');
+askCallback=callback;$('mAsk').classList.add('on');
+if(hasInput)$('askI').focus()}
+$('askY').addEventListener('click',function(){$('mAsk').classList.remove('on');if(askCallback)askCallback($('askI').value);askCallback=null});
+$('askN').addEventListener('click',function(){$('mAsk').classList.remove('on');askCallback=null});
+var WORLD_SIZES=[[256,'256²','~1s'],[512,'512²','~1s'],[2048,'2048²','~2s'],[4096,'4096²','~3s'],[8192,'8192²','~4s'],[16384,'16384²','~6s'],[32768,'32768²',L('тест','test')]];
+var createOpts={size:512,depth:72,height:140,difficulty:'normal',mode:'survival'};
+var SEED_PRESETS={city:1,island:1,jungle:1,mountains:1};
+function parseSeedInput(){
+var v=$('cSeed').value.trim().toLowerCase();
+if(!v)return{seed:ri(1,999999),preset:''};
+if(SEED_PRESETS[v])return{seed:v==='city'?101:v==='island'?202:v==='jungle'?303:404,preset:v};
+if(/^\d+$/.test(v))return{seed:+v,preset:''};
+var h=0;for(var i=0;i<v.length;i++)h=(Math.imul(h,31)+v.charCodeAt(i))|0;
+return{seed:Math.abs(h)%1e9,preset:''}}
+function openCreateScreen(){
+showScreen('create');GS='create';
+$('cSize').innerHTML=WORLD_SIZES.map(function(s){
+return'<div class="cd '+(s[0]===createOpts.size?'sel':'')+'" data-v="'+s[0]+'"><div class="t">'+s[1]+'</div><div class="d">'+s[2]+'</div></div>'}).join('');
+Array.prototype.forEach.call($('cSize').querySelectorAll('.cd'),function(c){
+c.addEventListener('click',function(){createOpts.size=+c.dataset.v;
+Array.prototype.forEach.call($('cSize').querySelectorAll('.cd'),function(x){x.classList.toggle('sel',x===c)});
+Snd.play('click');drawWorldPreview()})});
+$('cDiff').innerHTML=[['easy','EASY','#8ff0a0'],['normal','NORMAL','#9fcaff'],['hard','HARD','#ffbe8f'],['hardcore','HARDCORE','']].map(function(d){
+return'<div class="cd '+(d[0]==='hardcore'?'hc ':'')+(createOpts.difficulty===d[0]?'sel':'')+'" data-v="'+d[0]+'">'+
+'<div class="t"'+(d[2]?' style="color:'+d[2]+'"':'')+'>'+d[1]+'</div>'+
+(d[0]==='hardcore'?'<div class="d">'+L('1 жизнь','1 life')+'</div>':'')+'</div>'}).join('');
+Array.prototype.forEach.call($('cDiff').querySelectorAll('.cd'),function(c){
+c.addEventListener('click',function(){createOpts.difficulty=c.dataset.v;
+Array.prototype.forEach.call($('cDiff').querySelectorAll('.cd'),function(x){x.classList.toggle('sel',x===c)});
+Snd.play('click');drawWorldPreview()})});
+$('cMode').innerHTML=[['survival','⚔ '+L('ВЫЖИВАНИЕ','SURVIVAL')],['creative','✦ '+L('КРЕАТИВ','CREATIVE')]].map(function(m){
+return'<div class="cd '+(createOpts.mode===m[0]?'sel':'')+'" data-v="'+m[0]+'"><div class="t">'+m[1]+'</div></div>'}).join('');
+Array.prototype.forEach.call($('cMode').querySelectorAll('.cd'),function(c){
+c.addEventListener('click',function(){createOpts.mode=c.dataset.v;
+Array.prototype.forEach.call($('cMode').querySelectorAll('.cd'),function(x){x.classList.toggle('sel',x===c)});
+Snd.play('click');drawWorldPreview()})});
+drawWorldPreview();$('cTip').textContent='💡 '+pk(LOAD_TIPS)}
+function drawWorldPreview(){
+var cv=$('prev'),ctx=cv.getContext('2d'),W=cv.width,H=cv.height,
+oldSeed=SEED,oldPreset=PRESET,oldSea=SEA,oldDepth=DEPTH,oldHeight=HEIGHT,oldH=WORLD_H,
+parsed=parseSeedInput();
+SEED=parsed.seed;seedNoise(parsed.seed);PRESET=parsed.preset;
+SEA=createOpts.depth;DEPTH=createOpts.depth;HEIGHT=createOpts.height;WORLD_H=createOpts.depth+createOpts.height+16;
+columnCache.clear();
+function yOf(y){return H-8-(y/WORLD_H)*(H-16)}
+ctx.fillStyle='#080513';ctx.fillRect(0,0,W,H);
+var grad=ctx.createLinearGradient(0,0,0,yOf(createOpts.depth));
+grad.addColorStop(0,'#1a2a5e');grad.addColorStop(1,'#4a7ac0');
+ctx.fillStyle=grad;ctx.fillRect(0,0,W,yOf(createOpts.depth));
+for(var q=0;q<W;q+=2){
+var wx=Math.floor(q/W*512),h=terrainHeight(wx,256),b=biomeAt(wx,256,h),yy=yOf(h);
+ctx.fillStyle=h<createOpts.depth?'#2a5fd0':shade(BIOMES[b].grass,1);
+ctx.fillRect(q,yy,2,H-8-yy);
+if(h<createOpts.depth){ctx.fillStyle='rgba(60,120,230,.8)';ctx.fillRect(q,yOf(createOpts.depth),2,yy-yOf(createOpts.depth))}}
+ctx.fillStyle='#3a3a40';ctx.fillRect(0,H-8,W,8);
+ctx.strokeStyle='#3fe0e8';ctx.setLineDash([5,4]);ctx.beginPath();
+ctx.moveTo(0,yOf(createOpts.depth));ctx.lineTo(W,yOf(createOpts.depth));ctx.stroke();ctx.setLineDash([]);
+ctx.fillStyle='#3fe0e8';ctx.font='10px Rubik';ctx.fillText(L('море Y=','sea Y=')+createOpts.depth,6,yOf(createOpts.depth)-5);
+ctx.fillStyle='#ffdd8a';ctx.fillText(L('горы до Y=','peaks Y=')+(createOpts.depth+createOpts.height),6,12);
+SEED=oldSeed;seedNoise(oldSeed);PRESET=oldPreset;SEA=oldSea;DEPTH=oldDepth;HEIGHT=oldHeight;WORLD_H=oldH;
+columnCache.clear();
+$('cSum').innerHTML=L('Мир ','World ')+'<b>'+createOpts.size+'²</b> · '+L('глубина ','depth ')+'<b>'+createOpts.depth+
+'</b> · '+L('горы до ','peaks ')+'<b>Y='+(createOpts.depth+createOpts.height)+'</b>'+
+(parsed.preset?'<br>'+L('Пресет: ','Preset: ')+'<b style="color:var(--am2)">'+parsed.preset.toUpperCase()+'</b>':'')+
+'<br>'+L('Генерация: ','Generation: ')+'<b>'+(createOpts.size<=512?'~1s':createOpts.size<=4096?'~3s':'~6s')+'</b> · '+
+createOpts.difficulty.toUpperCase()+
+(createOpts.difficulty==='hardcore'?'<br><span style="color:var(--rd)">⚠ '+L('Одна жизнь, без команд','One life, no commands')+'</span>':'')}
+/* ---------- settings screen ---------- */
+function renderSettings(){
+$('sRd').value=SET.rd;$('rdV').textContent=SET.max?'MAX ∞':RD[SET.rd];
+$('sFov').value=SET.fov;$('fovV').textContent=SET.fov+'°';
+$('sBr').value=SET.br;$('brV').textContent=SET.br+'%';
+$('sFly').value=SET.fly;$('flyV').textContent=SET.fly;
+$('sSen').value=SET.sen;$('senV').textContent=SET.sen+'%';
+$('sMus').value=Math.round(SET.mus*100);$('musV').textContent=Math.round(SET.mus*100)+'%';
+$('sSfx').value=Math.round(SET.sfx*100);$('sfxV').textContent=Math.round(SET.sfx*100)+'%';
+[['tMax','max'],['tCloud','cloud'],['tBob','bob'],['tInvY','invY'],['tAj','aj'],['tLock','lock'],['tHp','hp'],['tMute','mute']].forEach(function(p){
+$(p[0]).classList.toggle('on',SET[p[1]])});
+$('cPart').innerHTML=[0,1,2].map(function(i){
+return'<div class="cd '+(SET.part===i?'sel':'')+'" data-v="'+i+'"><div class="t">'+
+(LANG==='ru'?['МИН','СРЕД','МАКС'][i]:['MIN','MED','MAX'][i])+'</div></div>'}).join('');
+Array.prototype.forEach.call($('cPart').querySelectorAll('.cd'),function(c){
+c.addEventListener('click',function(){SET.part=+c.dataset.v;renderSettings();applySettings()})});
+$('mUrl').value=CUS.music&&CUS.music.indexOf('data:')!==0?CUS.music:'';
+$('bUrl').value=CUS.bg&&CUS.bg.indexOf('data:')!==0?CUS.bg:'';
+$('mState').textContent=CUS.music?'♪ '+(CUS.mn||'custom'):L('Встроенная музыка','Built-in music');
+$('bState').textContent=CUS.bg?'🖼 '+(CUS.bn||'custom'):L('Стандартный фон','Default background');
+syncMuteButtons()}
+function applySettings(){
+camera.fov=SET.fov;camera.updateProjectionMatrix();
+cloudGroup.visible=SET.cloud;Snd.vol();saveSet();syncMuteButtons();
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,SET.max?1.7:1.4));
+if(World){var rd=rdVal();scene.fog.near=rd*.52;scene.fog.far=rd*.98;
+camera.far=Math.max(400,rd*1.3);camera.updateProjectionMatrix();remeshVisible();streamWorld()}}
+function syncMuteButtons(){var icon=SET.mute?'🔇':'🔊';$('mute1').textContent=icon;$('mute2').textContent=icon}
+function toggleMute(){SET.mute=!SET.mute;Snd.vol();syncMuteButtons();saveSet();$('tMute').classList.toggle('on',SET.mute)}
+/* ---------- account screen ---------- */
+function renderAccount(){
+$('nick').value=PROF.nick;
+var unlocked=Object.keys(PROF.ach).length;
+$('achCnt').innerHTML=L('Открыто ','Unlocked ')+'<b style="color:var(--am2)">'+unlocked+'</b> / <b>'+ACHIEVEMENTS.length+'</b>';
+$('achList').innerHTML=ACHIEVEMENTS.map(function(a){
+var has=PROF.ach[a[0]],secret=a[0]==='secret'&&!has;
+return'<div class="ac '+(has?'got':'lk')+'"><div class="i" style="'+iconStyle(a[1],32)+'"></div>'+
+'<div><div class="n">'+(secret?'???':a[2])+'</div><div class="d">'+(secret?L('Секретное','Secret'):a[3])+'</div></div></div>'}).join('');
+$('statList').innerHTML=[[fmtTime(PROF.time),L('Время в игре','Playtime')],[PROF.worlds,L('Миров','Worlds')],
+[nfmt(PROF.broken),L('Сломано','Broken')],[nfmt(PROF.placed),L('Поставлено','Placed')],
+[PROF.kills,L('Мобов','Mobs')],[PROF.deaths,L('Смертей','Deaths')],
+[(PROF.dist/1000).toFixed(1)+' km',L('Пройдено','Walked')],[nfmt(PROF.craft),L('Скрафчено','Crafted')],
+[PROF.bred,L('Размножено','Bred')],[BLOCKS.length,L('Блоков в игре','Blocks')],
+[ITEM_LIST.length,L('Предметов','Items')],[texCount+'/4096',L('Тайлов атласа','Atlas tiles')]].map(function(s){
+return'<div class="st"><div class="v">'+s[0]+'</div><div class="l">'+s[1]+'</div></div>'}).join('')}
+/* ---------- language ---------- */
+function applyLanguage(){
+var map={bPlay:'play',bSet:'settings',bAcc:'account',hWorlds:'worlds',wBack:'back',noWorlds:'none',
+wPlay:'play',wNew:'create',wRen:'rename',wDel:'del',hCreate:'newWorld',cBack:'back',lName:'name',lSeed:'seed',
+lSize:'size',lDep:'depth',lHt:'height',lDiff:'diff',lMode:'mode',lSlice:'slice',cGo:'make',
+hSet:'settings',sBack:'back',pLow:'low',pMid:'mid',pHigh:'high',pMax:'maxPre',sGfx:'gfx',lMax:'max',lRd:'rd',
+lFov:'fov',lBr:'bright',lFly:'flySpd',lCloud:'clouds',lBob:'bob',lPart:'parts',sCtrl:'ctrl',lSen:'sens',
+lInvY:'invY',lAj:'autoJ',lLock:'lock',lHp:'showHp',sSnd:'snd',lMute:'muteAll',lMus:'music',lSfx:'sfx',
+sCustom:'custom',lMusUrl:'musUrl',lMusFile:'musFile',lBgUrl:'bgUrl',lBgFile:'bgFile',
+mApply:'apply',mReset:'reset',bApply:'apply',bReset:'reset',sKeys:'keys',
+hAcc:'account',aBack:'back',lNick:'nick',aSave:'save',tabAch:'ach',tabSt:'stats',
+hMap:'map',mapClose:'close',mFollow:'follow',mRefresh:'refresh',askY:'ok',askN:'cancel',
+hPause:'pause',pRes:'resume',pMap:'map',pSet:'settings',pAch:'ach',pExit:'quit',
+dResp:'respawn',dDel:'delWorld',dMenu:'toMenu',invClose:'close',coreNote:'coreNote'};
+Object.keys(map).forEach(function(id){var el=$(id);if(el)el.textContent=T(map[id])});
+$('lang').textContent=LANG==='ru'?'English':'Русский';
+$('cName').value=L('Новый мир','New World');
+$('chi').placeholder=L('Сообщение или /команда… (/help)','Message or /command… (/help)');
+$('svi').textContent=T('saved');
+$('hint').innerHTML=L('<kbd>WASD</kbd> движение · <kbd>ЛКМ</kbd> ломать · <kbd>ПКМ</kbd> ставить · <kbd>E</kbd> инвентарь · <kbd>M</kbd> карта · <kbd>Z</kbd> зум · <kbd>R</kbd> плита · <kbd>T</kbd> чат',
+'<kbd>WASD</kbd> move · <kbd>LMB</kbd> break · <kbd>RMB</kbd> place · <kbd>E</kbd> inventory · <kbd>M</kbd> map · <kbd>Z</kbd> zoom · <kbd>R</kbd> slab · <kbd>T</kbd> chat');
+var keyList=[[L('Движение','Move'),'WASD'],[L('Прыжок','Jump'),'SPACE'],[L('Бег','Sprint'),'CTRL'],
+[L('Красться','Sneak'),'SHIFT'],[L('Полёт','Fly'),'F'],[L('Инвентарь','Inventory'),'E'],[L('Карта','Map'),'M'],
+[L('Зум','Zoom'),'Z'],[L('Поворот плиты','Rotate slab'),'R'],[L('Чат','Chat'),'T'],[L('Отладка','Debug'),'F3'],
+[L('Скриншот','Screenshot'),'F2'],[L('Звук','Sound'),'N'],[L('Выбросить','Drop'),'Q']];
+$('keys').innerHTML=keyList.map(function(k){return'<div><span>'+k[0]+'</span><kbd>'+k[1]+'</kbd></div>'}).join('');
+$('mapLegend').innerHTML=[['#a6f7ae',L('Вы','You')],['#ffb02e',L('Деревня','Village')],['#a99fce',L('Шахта','Mineshaft')]]
+.map(function(l){return'<span><i class="mdot" style="background:'+l[0]+'"></i>'+l[1]+'</span>'}).join('');
+if(GS==='create')openCreateScreen();
+if(GS==='settings')renderSettings();
+if(GS==='account')renderAccount();
+if(GS==='menu')showMenu();
+if(GS==='worlds')renderWorldList()}
+var SPLASHES=[L('Алмазы ждут!','Diamonds await!'),L('Не копай вниз!','Never dig down!'),
+L('Факелы реально светят!','Torches actually light up!'),L('M — карта мира','M — world map'),
+L('Осторожно, хардкор!','Careful, hardcore!'),L('Сделано с ❤ и вокселями','Made with ❤ and voxels'),
+L('Полублоки вертикально!','Vertical slabs!'),L('Стул — сядь и отдохни','Take a seat'),
+L('Размножай животных!','Breed the animals!'),L('Лава оранжевая, как надо','Lava is properly orange'),
+L('Мир 32768² — мгновенно','32768² worlds, instantly'),L('Z — зум, R — поворот','Z zoom, R rotate'),
+L('Кровать пропускает ночь','Beds skip the night'),L('Щит блокирует урон','Shields block damage'),
+L('Криты с падения ×1.5','Fall crits ×1.5'),L('Ядро готово, дальше — ад','Core ready, nether next')];
+function showMenu(){
+GS='menu';showScreen('menu');$('spl').textContent=pk(SPLASHES);
+$('greet').innerHTML=L('Привет, ','Hi, ')+'<b style="color:var(--gr2)">'+esc(PROF.nick)+'</b> · '+
+fmtTime(PROF.time)+' · '+BLOCKS.length+L(' блоков · ',' blocks · ')+ITEM_LIST.length+L(' предметов',' items');
+$('hud').classList.remove('on');$('f3').style.display='none';debugOn=false;
+['ovl','ovw','ovf'].forEach(function(k){$(k).classList.remove('on');$(k).style.opacity=0})}
+/* ---------- UI listeners ---------- */
+$('lang').addEventListener('click',function(){LANG=LANG==='ru'?'en':'ru';Store.set('ck_lang',LANG);applyLanguage();Snd.play('click')});
+$('fs').addEventListener('click',function(){
+if(document.fullscreenElement)document.exitFullscreen();
+else if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(function(){});
+if(World&&GS==='game')enterGame()});
+$('mute1').addEventListener('click',function(){Snd.init();toggleMute()});
+$('mute2').addEventListener('click',toggleMute);
+$('bPlay').addEventListener('click',function(){Snd.init();Snd.play('click');
+if(!Store.get('ck_worlds',[]).length)openCreateScreen();
+else{selectedWorld=null;renderWorldList();showScreen('worlds');GS='worlds'}});
+$('bSet').addEventListener('click',function(){Snd.init();Snd.play('click');UIContext='menu';renderSettings();showScreen('settings');GS='settings'});
+$('bAcc').addEventListener('click',function(){Snd.init();Snd.play('click');UIContext='menu';renderAccount();showScreen('account');GS='account'});
+$('wBack').addEventListener('click',showMenu);
+$('wPlay').addEventListener('click',playSelectedWorld);
+$('wNew').addEventListener('click',openCreateScreen);
+$('wDel').addEventListener('click',function(){
+var list=Store.get('ck_worlds',[]),meta=null;list.forEach(function(m){if(m.id===selectedWorld)meta=m});
+if(!meta)return;
+askDialog(L('Удалить мир?','Delete world?'),'«'+meta.name+'» '+L('будет удалён навсегда.','will be gone forever.'),function(){
+deleteWorld(meta.id);selectedWorld=null;renderWorldList();toast(L('Удалён','Deleted'),'warn')})});
+$('wRen').addEventListener('click',function(){
+var list=Store.get('ck_worlds',[]),meta=null;list.forEach(function(m){if(m.id===selectedWorld)meta=m});
+if(!meta)return;
+askDialog(L('Переименовать','Rename'),L('Новое название:','New name:'),function(value){
+if(!value.trim())return;
+meta.name=value.trim().slice(0,28);Store.set('ck_worlds',list);
+var data=Store.get('ck_w_'+meta.id,null);
+if(data){data.name=meta.name;Store.set('ck_w_'+meta.id,data)}
+renderWorldList()},meta.name)});
+$('cBack').addEventListener('click',function(){
+if(Store.get('ck_worlds',[]).length){renderWorldList();showScreen('worlds');GS='worlds'}else showMenu()});
+$('cDep').addEventListener('input',function(e){createOpts.depth=+e.target.value;$('depV').textContent=createOpts.depth;drawWorldPreview()});
+$('cHt').addEventListener('input',function(e){createOpts.height=+e.target.value;$('htV').textContent=createOpts.height;drawWorldPreview()});
+$('cDice').addEventListener('click',function(){$('cSeed').value=ri(1,999999);drawWorldPreview()});
+$('cSeed').addEventListener('input',drawWorldPreview);
+$('cGo').addEventListener('click',function(){
+Snd.init();Snd.play('click');var parsed=parseSeedInput();
+createWorld({name:$('cName').value.trim()||L('Новый мир','New World'),seed:parsed.seed,preset:parsed.preset,
+size:createOpts.size,depth:createOpts.depth,height:createOpts.height,
+difficulty:createOpts.difficulty,mode:createOpts.mode})});
+$('sBack').addEventListener('click',function(){saveSet();
+if(UIContext==='pause'){showScreen('pause');GS='pause'}else showMenu()});
+$('aBack').addEventListener('click',function(){saveProf();
+if(UIContext==='pacc'){UIContext='pause';showScreen('pause');GS='pause'}else showMenu()});
+$('aSave').addEventListener('click',function(){
+PROF.nick=$('nick').value.trim().slice(0,16)||'Игрок';saveProf();
+toast(L('Сохранено ✓','Saved ✓'));Snd.play('ach')});
+Array.prototype.forEach.call(document.querySelectorAll('#account .tb'),function(tab){
+tab.addEventListener('click',function(){
+Array.prototype.forEach.call(document.querySelectorAll('#account .tb'),function(x){x.classList.toggle('sel',x===tab)});
+$('paneAch').style.display=tab.dataset.tab==='ach'?'':'none';
+$('paneSt').style.display=tab.dataset.tab==='st'?'':'none';Snd.play('click')})});
+$('sRd').addEventListener('input',function(e){SET.rd=+e.target.value;$('rdV').textContent=RD[SET.rd];applySettings()});
+$('sFov').addEventListener('input',function(e){SET.fov=+e.target.value;$('fovV').textContent=SET.fov+'°';applySettings()});
+$('sBr').addEventListener('input',function(e){SET.br=+e.target.value;$('brV').textContent=SET.br+'%';applySettings()});
+$('sFly').addEventListener('input',function(e){SET.fly=+e.target.value;$('flyV').textContent=SET.fly;saveSet()});
+$('sSen').addEventListener('input',function(e){SET.sen=+e.target.value;$('senV').textContent=SET.sen+'%';saveSet()});
+$('sMus').addEventListener('input',function(e){SET.mus=+e.target.value/100;$('musV').textContent=e.target.value+'%';applySettings()});
+$('sSfx').addEventListener('input',function(e){SET.sfx=+e.target.value/100;$('sfxV').textContent=e.target.value+'%';applySettings();Snd.play('click')});
+[['tMax','max'],['tCloud','cloud'],['tBob','bob'],['tInvY','invY'],['tAj','aj'],['tLock','lock'],['tHp','hp'],['tMute','mute']].forEach(function(pair){
+$(pair[0]).addEventListener('click',function(){
+SET[pair[1]]=!SET[pair[1]];$(pair[0]).classList.toggle('on',SET[pair[1]]);Snd.play('click');applySettings();
+if(pair[1]==='hp')mobs.forEach(function(m){if(m.label)showMobLabel(m,null)})})});
+Array.prototype.forEach.call(document.querySelectorAll('[data-pre]'),function(btn){
+btn.addEventListener('click',function(){
+var p=btn.dataset.pre;
+if(p==='low'){SET.max=false;SET.rd=1;SET.cloud=false;SET.part=0}
+if(p==='mid'){SET.max=false;SET.rd=4;SET.cloud=true;SET.part=1}
+if(p==='high'){SET.max=false;SET.rd=7;SET.cloud=true;SET.part=2}
+if(p==='max'){SET.max=true;SET.rd=11;SET.cloud=true;SET.part=2;
+toast(L('💎 Максимальная графика: деревья не исчезают','💎 Maximum graphics: trees stay visible'))}
+renderSettings();applySettings();Snd.play('craft')})});
+$('mApply').addEventListener('click',function(){
+var url=$('mUrl').value.trim();
+if(url){CUS.music=url;CUS.mn=url.slice(0,40);Store.set('ck_cus',CUS);applyMusic();renderSettings();toast(L('Музыка применена ♪','Music applied ♪'));return}
+var file=$('mFile').files[0];
+if(file){readMedia(file,function(data){CUS.music=data;CUS.mn=file.name;Store.set('ck_cus',CUS);applyMusic();renderSettings();toast(L('Трек загружен ♪','Track loaded ♪'))});return}
+toast(L('Вставь ссылку или выбери файл','Paste URL or pick a file'),'warn')});
+$('mReset').addEventListener('click',function(){
+CUS.music='';CUS.mn='';Store.set('ck_cus',CUS);applyMusic();
+$('mUrl').value='';$('mFile').value='';renderSettings();toast(L('Музыка сброшена ↺','Music reset ↺'))});
+$('bApply').addEventListener('click',function(){
+var url=$('bUrl').value.trim();
+if(url){CUS.bg=url;CUS.bn=url.slice(0,40);Store.set('ck_cus',CUS);applyBg();renderSettings();toast(L('Фон применён 🖼','Background applied 🖼'));return}
+var file=$('bFile').files[0];
+if(file){readMedia(file,function(data){CUS.bg=data;CUS.bn=file.name;Store.set('ck_cus',CUS);applyBg();renderSettings();toast(L('Фон загружен 🖼','Background loaded 🖼'))});return}
+toast(L('Вставь ссылку или выбери файл','Paste URL or pick a file'),'warn')});
+$('bReset').addEventListener('click',function(){
+CUS.bg='';CUS.bn='';Store.set('ck_cus',CUS);applyBg();
+$('bUrl').value='';$('bFile').value='';renderSettings();toast(L('Фон сброшен ↺','Background reset ↺'))});
+$('hMap').addEventListener('click',function(){if(GS==='game')openMap()});
+$('pRes').addEventListener('click',enterGame);
+$('pMap').addEventListener('click',openMap);
+$('pSet').addEventListener('click',function(){UIContext='pause';renderSettings();showScreen('settings');GS='settings'});
+$('pAch').addEventListener('click',function(){
+UIContext='pacc';renderAccount();showScreen('account');GS='account';
+Array.prototype.forEach.call(document.querySelectorAll('#account .tb'),function(x){x.classList.toggle('sel',x.dataset.tab==='ach')});
+$('paneAch').style.display='';$('paneSt').style.display='none'});
+$('pExit').addEventListener('click',function(){saveWorld();saveProf();clearWorldState();World=null;showMenu()});
+$('dResp').addEventListener('click',respawnPlayer);
+$('dMenu').addEventListener('click',function(){saveWorld();saveProf();clearWorldState();World=null;showMenu()});
+$('dDel').addEventListener('click',function(){var id=World.id;saveProf();clearWorldState();World=null;deleteWorld(id);showMenu()});
+/* ---------- input ---------- */
+var lastSpaceTap=0,lastWTap=0,ALLOWED_KEYS=['F5','F11','F12'];
+window.addEventListener('keydown',function(e){
+var typing=e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA';
+if(!typing&&SET.lock&&World&&['game','inv','chat','map','pause'].indexOf(GS)>=0){
+if(ALLOWED_KEYS.indexOf(e.key)>=0)return;
+if(e.ctrlKey&&e.shiftKey&&(e.code==='KeyI'||e.code==='KeyJ'||e.code==='KeyC'))return;
+e.preventDefault()}},true);
+document.addEventListener('keydown',function(e){
+if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
+if(!e.repeat)keys[e.code]=true;
+if(!World){if(e.code==='Escape')$('mAsk').classList.remove('on');return}
+if(e.code==='Escape'){
+if(GS==='inv')closeInventory();
+else if(GS==='chat')closeChat();
+else if(GS==='map')closeMap();
+else if(GS==='pause')enterGame();
+else if(GS==='game'&&pointerLockFallback)pauseGame();
+return}
+if(GS==='chat')return;
+if(e.code==='KeyE'&&(GS==='game'||GS==='inv')){
+if(GS==='inv')closeInventory();else openInventory(Pl.creative?'creative':'inv');return}
+if(e.code==='KeyM'&&(GS==='game'||GS==='map')){if(GS==='map')closeMap();else openMap();return}
+if(GS!=='game')return;
+if(e.code==='KeyT'){openChat('');return}
+if(e.code==='Slash'){openChat('/');return}
+if(e.code==='KeyZ'){Pl.zoom=!Pl.zoom;Pl.zoomFactor=.35;
+toast(Pl.zoom?L('Зум: колесо меняет приближение','Zoom: wheel adjusts'):L('Зум выключен','Zoom off'));return}
+if(e.code==='KeyR'){Pl.slabRotation=(Pl.slabRotation+1)%6;
+toast(L(['низ','верх','север','юг','запад','восток'][Pl.slabRotation]+' плита',
+['bottom','top','north','south','west','east'][Pl.slabRotation]+' slab'));return}
+if(e.code==='F3'){debugOn=!debugOn;$('f3').style.display=debugOn?'block':'none';return}
+if(e.code==='F1'){$('hud').classList.toggle('on');return}
+if(e.code==='F2'){renderer.render(scene,camera);
+var a=document.createElement('a');a.download='spikecraft_'+Date.now()+'.png';a.href=canvas.toDataURL('image/png');a.click();
+toast('📸');return}
+if(e.code==='KeyN'){toggleMute();return}
+if(e.repeat)return;
+if(e.code==='KeyF'){toggleFlight();return}
+if(e.code==='Space'){var now=performance.now();if(now-lastSpaceTap<300&&!Pl.mount)toggleFlight();lastSpaceTap=now;return}
+if(e.code==='KeyW'){var now2=performance.now();if(now2-lastWTap<300)touchSprint=true;lastWTap=now2;return}
+if(e.code==='KeyQ'){var stack=Pl.inv[Pl.sel];
+if(stack){var count=e.ctrlKey?stack.n:1,d=lookDir();
+spawnDrop(Pl.pos.x+d.x*1.2,Pl.pos.y+1.35,Pl.pos.z+d.z*1.2,{id:stack.id,n:count,dur:stack.dur},d.x*6,1.6,d.z*6);
+stack.n-=count;if(stack.n<=0)Pl.inv[Pl.sel]=null;renderHotbar();updateHand()}return}
+if(e.code.indexOf('Digit')===0){var digit=+e.code.slice(5);if(digit>=1&&digit<=9)selectSlot(digit-1)}},true);
+document.addEventListener('keyup',function(e){keys[e.code]=false;if(e.code==='KeyW')touchSprint=false},true);
+function toggleFlight(){
+if(Pl.creative||Pl.flyAllowed||Pl.spectator){
+if(Pl.spectator){toast(L('В наблюдателе полёт всегда включён','Spectator always flies'));return}
+Pl.fly=!Pl.fly;Pl.vel.y=0;
+toast(Pl.fly?L('🕊 Полёт включён','🕊 Flight on'):L('Полёт выключен','Flight off'));
+if(!Pl.creative&&Pl.fly)markCheats()}
+else toast(L('Полёт: креатив или /fly','Flight: creative or /fly'),'warn')}
+document.addEventListener('mousemove',function(e){
+if(!World){panoMouse.x=(e.clientX/innerWidth-.5)*2;panoMouse.y=(e.clientY/innerHeight-.5)*2;return}
+if(GS!=='game')return;
+if(document.pointerLockElement!==canvas&&!pointerLockFallback)return;
+var sens=.0022*(SET.sen/100);
+Pl.yaw-=e.movementX*sens;
+Pl.pitch=cl(Pl.pitch-e.movementY*sens*(SET.invY?-1:1),-1.55,1.55)});
+document.addEventListener('mousedown',function(e){
+if(GS!=='game')return;
+if(e.target.closest('.ib')||e.target.closest('#hb'))return;
+if(e.button===0){mouseLeft=true;Pl.swing=Math.max(Pl.swing,.4)}
+if(e.button===2){mouseRight=true;useCooldown=0}
+if(e.button===1){e.preventDefault();
+var t=Pl.target;
+if(t&&Pl.creative){var key=BLOCKS[t.id].key;
+if(ITEMS[key]&&!ITEMS[key].hidden){Pl.inv[Pl.sel]={id:key,n:64};renderHotbar();updateHand()}}}});
+document.addEventListener('mouseup',function(e){if(e.button===0)mouseLeft=false;if(e.button===2)mouseRight=false});
+document.addEventListener('contextmenu',function(e){if(World)e.preventDefault()});
+document.addEventListener('wheel',function(e){
+if(GS!=='game')return;e.preventDefault();
+if(Pl.zoom){Pl.zoomFactor=cl(Pl.zoomFactor*(e.deltaY>0?1.12:.89),.12,1);return}
+selectSlot((Pl.sel+(e.deltaY>0?1:-1)+9)%9)},{passive:false});
+/* ---------- main loop ---------- */
+var lastFrame=performance.now(),saveTimer=0,tickTimer=0,spawnTimer=0,hudTimer=0,debugTimer=0,
+achTimer=0,streamTimer=0,mapTimer=0,fireTimer=0;
+function frame(now){
+requestAnimationFrame(frame);
+var dt=Math.min(.05,(now-lastFrame)/1000);lastFrame=now;
+frameCount++;fpsAccum+=dt;
+if(fpsAccum>=1){fps=frameCount;frameCount=0;fpsAccum=0}
+if(World&&['game','inv','chat','death','map'].indexOf(GS)>=0){
+if(GS!=='map'){
+World.playTime+=dt;PROF.time+=dt;
+if(GS==='game'||GS==='chat')updatePlayer(dt);
+if(GS==='game')updateInteraction(dt);
+mobs.slice().forEach(function(m){updateMob(m,dt)});
+updateRides(dt);updateDrops(dt);updateProjectiles(dt);updateTNT(dt);updateLeafDecay(dt);
+updateSky(dt);
+fireTimer+=dt;if(fireTimer>.5){fireTimer=0;updateFires(.5)}
+tickTimer+=dt;if(tickTimer>.6){tickTimer=0;randomTick()}
+updateFurnaces(dt);
+spawnTimer+=dt;if(spawnTimer>2.4){spawnTimer=0;trySpawnMobs()}
+streamTimer+=dt;if(streamTimer>.35){streamTimer=0;streamWorld()}
+processQueues(GS==='game'?4:2.5);
+hudTimer+=dt;if(hudTimer>.15){hudTimer=0;updateHud();
+if(invMode==='furnace'&&invTarget){
+var c=containers.get(containerKey(invTarget));
+if(c){var burnEl=$('fBurn'),progEl=$('fProg');
+if(burnEl)burnEl.style.height=(c.burnMax?c.burn/c.burnMax*100:0)+'%';
+if(progEl)progEl.style.width=(c.progress/7*100)+'%'}}
+var lines=[],held=Pl.inv[Pl.sel];
+if(held&&ITEMS[held.id].compass){
+var dx=World.spawn[0]-Pl.pos.x,dz=World.spawn[2]-Pl.pos.z;
+lines.push('⌖ '+L('спавн ','spawn ')+Math.round(Math.hypot(dx,dz))+'m')}
+else if(held&&ITEMS[held.id].clock){
+var hours=World.time/DAY_LENGTH*24,hh=Math.floor(hours),mm=Math.floor((hours-hh)*60);
+lines.push((isNight()?'☾ ':'☀ ')+String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0'))}
+if(Pl.nightVision)lines.push('👁 NV');
+if(Pl.mount)lines.push(Pl.mount.kind==='cart'?'🚋':'🛶');
+$('hinfo').innerHTML=lines.join('<br>')}
+debugTimer+=dt;if(debugTimer>.3){debugTimer=0;updateDebug()}
+achTimer+=dt;if(achTimer>2){achTimer=0;
+if(World.playTime>=3600)award('hour');
+if(World.survivedNight&&!isNight()){award('night');World.survivedNight=false}
+if(isNight())World.survivedNight=true;
+checkLegend()}
+saveTimer+=dt;if(saveTimer>30){saveTimer=0;saveWorld();saveProf()}}
+updateParticles(dt);
+rainPoints.visible=World.weather==='rain'&&SET.part>0;
+if(rainPoints.visible){
+var arr=rainGeo.attributes.position.array,count=SET.part===2?RAIN_N:RAIN_N/2;
+for(var i=0;i<RAIN_N;i++){
+if(i>=count){arr[i*3+1]=-999;continue}
+arr[i*3+1]-=24*dt;
+if(arr[i*3+1]<-6){arr[i*3]=rn(-32,32);arr[i*3+1]=40;arr[i*3+2]=rn(-32,32)}}
+rainGeo.attributes.position.needsUpdate=true;
+rainPoints.position.set(Pl.pos.x,Pl.pos.y,Pl.pos.z)}
+renderer.render(scene,camera);
+if(GS==='map'){mapTimer+=dt;if(mapTimer>.18){mapTimer=0;drawMap()}}}
+else if(World&&['pause','settings','account'].indexOf(GS)>=0)renderer.render(scene,camera);
+else{updatePanorama(dt);renderer.render(panoScene,panoCam)}}
+addEventListener('resize',function(){
+renderer.setSize(innerWidth,innerHeight,false);
+camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+panoCam.aspect=innerWidth/innerHeight;panoCam.updateProjectionMatrix();
+if(GS==='map'){var cv=$('mapc');cv.width=Math.min(780,cv.clientWidth||780);cv.height=Math.round(cv.width*.56);drawMap()}});
+addEventListener('beforeunload',function(){if(World){saveWorld();saveProf()}});
+document.addEventListener('pointerdown',function(){
+Snd.init();if(customAudio&&customAudio.paused)customAudio.play().catch(function(){})});
+/* ---------- boot ---------- */
+buildPanorama();applyLanguage();renderSettings();applySettings();applyBg();applyMusic();
+showMenu();renderHotbar();
+console.log('%cSpikeCraft core','color:#57d96b;font-weight:bold',
+'| blocks:',BLOCKS.length,'| items:',ITEM_LIST.length,'| atlas tiles:',texCount+'/4096',
+'| chunk storage: Uint16Array (max id 65535)');
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
