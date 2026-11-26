@@ -1172,7 +1172,7 @@ var bright=shadeMul*(.58+.14*av)*(.09+.91*lv)*SET.br/100;
 buf.c.push(bright*tint[0],bright*tint[1],bright*tint[2])}
 if(ao[0]+ao[3]>ao[1]+ao[2])buf.i.push(o,o+1,o+3,o,o+3,o+2);else buf.i.push(o,o+1,o+2,o+2,o+1,o+3)}
 function pushCross(buf,bx,by,bz,tileId,tint,width,height,light){
-var x1=.5-width,x2=.5+w,quads,qs=[[[x1,0,x1],[x2,0,x2],[x1,height,x1],[x2,height,x2]],[[x2,0,x1],[x1,0,x2],[x2,height,x1],[x1,height,x2]]],
+var x1=.5-width,x2=.5+width,qs=[[[x1,0,x1],[x2,0,x2],[x1,height,x1],[x2,height,x2]],[[x2,0,x1],[x1,0,x2],[x2,height,x1],[x1,height,x2]]],
 uvs=[[0,0],[1,0],[0,1],[1,1]];
 for(var q=0;q<2;q++)for(var s=0;s<2;s++){var o=buf.p.length/3,order=s?[0,1,2,2,1,3]:[2,1,0,3,1,2];
 for(var k=0;k<4;k++){var v=qs[q][order[k]];
@@ -1239,7 +1239,6 @@ var made=[[buf.opaque,matOpaque],[buf.cutout,matCutout],[buf.trans,matTrans],[bu
 var total=0;
 made.forEach(function(pair){var m=finish(pair[0],pair[1]);if(m){c.meshes.push(m);total+=pair[0].i.length/6}});
 c.faces=total;c.dirty=false}
-var w=x2; // placeholder removed below
 /* ---------- far LOD shell ---------- */
 var farRegions=new Map();
 function farKey(rx,rz){return rx+':'+rz}
