@@ -3620,7 +3620,7 @@ else if(kind==='blaze'){
 parts.head=mobHead(0.56,0.56,0.56,cc,0,1.42,0,kind);g.add(parts.head);
 parts.core=makeBox(0.34,0.5,0.34,0xffe070,0,0.95,0);g.add(parts.core);
 parts.legs=[];
-;b++){var ba=b/12*6.283;
+for(var b=0;b<12;b++){var ba=b/12*6.283;
 var rod=makeBox(0.13,0.62,0.13,0xffd84a,Math.cos(ba)*0.5,0.72+((b%3)-1)*0.34,Math.sin(ba)*0.5);
 g.add(rod);parts.legs.push(rod)}}
 else if(kind==='shulker'){
